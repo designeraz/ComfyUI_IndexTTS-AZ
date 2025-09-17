@@ -55,10 +55,32 @@ from transformers.generation.candidate_generator import (
     AssistedCandidateGeneratorDifferentTokenizers,
     CandidateGenerator,
     PromptLookupCandidateGenerator,
-    _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
 )
+
+# Custom implementation of _crop_past_key_values for compatibility
+def _crop_past_key_values(model, past_key_values, maximum_length):
+    """
+    Crops the past key values up to a certain maximum length.
+    """
+    if past_key_values is None:
+        return past_key_values
+    
+    new_past = []
+    for layer_past in past_key_values:
+        if isinstance(layer_past, tuple):
+            # For tuple format (key, value)
+            new_layer_past = tuple(
+                past_state[:, :, :maximum_length, :] if past_state is not None else None
+                for past_state in layer_past
+            )
+        else:
+            # For tensor format
+            new_layer_past = layer_past[:, :, :maximum_length, :] if layer_past is not None else None
+        new_past.append(new_layer_past)
+    
+    return tuple(new_past) if isinstance(past_key_values, tuple) else new_past
 from transformers.generation.configuration_utils import (
     NEED_SETUP_CACHE_CLASSES_MAPPING,
     QUANT_BACKEND_CLASSES_MAPPING,
@@ -1002,7 +1024,7 @@ class GenerationMixin:
                     device=device,
                 )
             )
-        if generation_config.forced_decoder_ids is not None:
+        if hasattr(generation_config, 'forced_decoder_ids') and generation_config.forced_decoder_ids is not None:
             # TODO (sanchit): move this exception to GenerationConfig.validate() when TF & FLAX are aligned with PT
             raise ValueError(
                 "You have explicitly specified `forced_decoder_ids`. Please remove the `forced_decoder_ids` argument "

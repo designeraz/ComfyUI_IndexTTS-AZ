@@ -6,6 +6,8 @@ Very high voice cloning quality, extremely fast, supports Chinese and English, a
 
 ## 📣 Updates
 
+[2025-09-17]⚒️: Fixed the dependency issue with transformers
+
 [2025-05-30]⚒️: Released v1.2.0. **Supports two-person dialogue, speaker preview, normal pynini installation on Windows, no longer a crippled TTS version!**
 
 `IndexTTS 正式发布1.5 版本了，效果666,晕XUAN4是一种GAN3觉,我爱你！,I love you!,“我爱你”的英语是“I love you”,2.5平方电线,共465篇，约315万字,2002年的第一场雪，下在了2003年.`

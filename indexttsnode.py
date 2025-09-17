@@ -104,17 +104,14 @@ class AudioCacheManager:
 
     def process_audio(self, audio_tensor: torch.Tensor, sample_rate: int) -> str:
         if self._cached_audio_tensor is None:
-            # 第一次输入，缓存音频
             self._cached_audio_tensor = audio_tensor
             self._cached_sample_rate = sample_rate
             self._cached_filepath = self._cache_audio_tensor(audio_tensor, sample_rate)
             return self._cached_filepath
         else:
-            # 第二次及以后输入，进行比较
             if self._statistical_compare(self._cached_audio_tensor, audio_tensor):
                 return self._cached_filepath
             else:
-                # 重新缓存新的音频
                 self._cached_audio_tensor = audio_tensor
                 self._cached_sample_rate = sample_rate
 
@@ -486,7 +483,34 @@ class IndexTTS2:
                 random_index = [find_most_similar_cosine(style, tmp) for tmp in self.spk_matrix]
 
             emo_matrix = [tmp[index].unsqueeze(0) for index, tmp in zip(random_index, self.emo_matrix)]
-            emo_matrix = torch.cat(emo_matrix, 0)
+            # 确保所有张量具有相同的形状（除了batch维度）
+            if len(emo_matrix) > 1:
+                # 获取第一个张量的形状作为参考
+                target_shape = emo_matrix[0].shape[1:]
+                # 检查并调整其他张量的形状
+                adjusted_matrices = []
+                for i, matrix in enumerate(emo_matrix):
+                    if matrix.shape[1:] != target_shape:
+                        # 如果形状不匹配，进行插值或截断调整
+                        if len(target_shape) == 1:  # 1D张量
+                            if matrix.shape[1] > target_shape[0]:
+                                # 截断
+                                matrix = matrix[:, :target_shape[0]]
+                            elif matrix.shape[1] < target_shape[0]:
+                                # 填充
+                                padding = target_shape[0] - matrix.shape[1]
+                                matrix = torch.cat([matrix, torch.zeros(matrix.shape[0], padding, device=matrix.device, dtype=matrix.dtype)], dim=1)
+                        else:  # 多维张量
+                            # 对于多维张量，使用插值调整到目标形状
+                            matrix = torch.nn.functional.interpolate(
+                                matrix.unsqueeze(0), 
+                                size=target_shape, 
+                                mode='nearest'
+                            ).squeeze(0)
+                    adjusted_matrices.append(matrix)
+                emo_matrix = torch.cat(adjusted_matrices, 0)
+            else:
+                emo_matrix = torch.cat(emo_matrix, 0)
             emovec_mat = weight_vector.unsqueeze(1) * emo_matrix
             emovec_mat = torch.sum(emovec_mat, 0)
             emovec_mat = emovec_mat.unsqueeze(0)
@@ -1065,7 +1089,6 @@ class IndexTTS:
             print(f"origin text:{text}")
         start_time = time.perf_counter()
 
-        # 如果参考音频改变了，才需要重新生成 cond_mel, 提升速度
         if self.cache_cond_mel is None or self.cache_audio_prompt != audio_prompt:
             audio, sr = torchaudio.load(audio_prompt)
             audio = torch.mean(audio, dim=0, keepdim=True)
@@ -1121,8 +1144,8 @@ class IndexTTS:
         bucket_count = len(all_sentences)
         if verbose:
             print(">> sentences bucket_count:", bucket_count,
-                  "bucket sizes:", [(len(s), [t["idx"] for t in s]) for s in all_sentences],
-                  "bucket_max_size:", bucket_max_size)
+                    "bucket sizes:", [(len(s), [t["idx"] for t in s]) for s in all_sentences],
+                    "bucket_max_size:", bucket_max_size)
         for sentences in all_sentences:
             temp_tokens: List[torch.Tensor] = []
             all_text_tokens.append(temp_tokens)
@@ -1335,7 +1358,7 @@ class IndexTTS:
                 with torch.amp.autocast(text_tokens.device.type, enabled=self.dtype is not None, dtype=self.dtype):
                     codes = self.gpt.inference_speech(auto_conditioning, text_tokens,
                                                         cond_mel_lengths=torch.tensor([auto_conditioning.shape[-1]],
-                                                                                      device=text_tokens.device),
+                                                                                        device=text_tokens.device),
                                                         # text_lengths=text_len,
                                                         do_sample=do_sample,
                                                         top_p=top_p,
@@ -1665,7 +1688,6 @@ class IndexSpeakersPreview:
 class MultiLinePromptIndex:
     @classmethod
     def INPUT_TYPES(cls):
-               
         return {
             "required": {
                 "multi_line_prompt": ("STRING", {

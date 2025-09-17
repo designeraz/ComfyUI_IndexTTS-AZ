@@ -97,8 +97,14 @@ class TextNormalizer:
             self.zh_normalizer = Normalizer(remove_erhua=False, lang="zh", operator="tn")
             self.en_normalizer = Normalizer(lang="en", operator="tn")
         else:
-            from tn.chinese.normalizer import Normalizer as NormalizerZh
-            from tn.english.normalizer import Normalizer as NormalizerEn
+            try:
+                from tn.chinese.normalizer import Normalizer as NormalizerZh
+                from tn.english.normalizer import Normalizer as NormalizerEn
+            except ImportError:
+                print("Warning: tn.chinese/tn.english not available, text normalization disabled")
+                self.zh_normalizer = None
+                self.en_normalizer = None
+                return
             # use new cache dir for build tagger rules with disable remove_interjections and remove_erhua
             cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tagger_cache")
             if not os.path.exists(cache_dir):
@@ -112,8 +118,8 @@ class TextNormalizer:
 
     def normalize(self, text: str) -> str:
         if not self.zh_normalizer or not self.en_normalizer:
-            print("Error, text normalizer is not initialized !!!")
-            return ""
+            print("Warning: text normalizer is not initialized, returning original text")
+            return text
         if self.use_chinese(text):
             text = re.sub(TextNormalizer.ENGLISH_CONTRACTION_PATTERN, r"\1 is", text, flags=re.IGNORECASE)
             replaced_text, pinyin_list = self.save_pinyin_tones(text.rstrip())
