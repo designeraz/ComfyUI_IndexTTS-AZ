@@ -104,14 +104,17 @@ class AudioCacheManager:
 
     def process_audio(self, audio_tensor: torch.Tensor, sample_rate: int) -> str:
         if self._cached_audio_tensor is None:
+            # 第一次输入，缓存音频
             self._cached_audio_tensor = audio_tensor
             self._cached_sample_rate = sample_rate
             self._cached_filepath = self._cache_audio_tensor(audio_tensor, sample_rate)
             return self._cached_filepath
         else:
+            # 第二次及以后输入，进行比较
             if self._statistical_compare(self._cached_audio_tensor, audio_tensor):
                 return self._cached_filepath
             else:
+                # 重新缓存新的音频
                 self._cached_audio_tensor = audio_tensor
                 self._cached_sample_rate = sample_rate
 
@@ -1089,6 +1092,7 @@ class IndexTTS:
             print(f"origin text:{text}")
         start_time = time.perf_counter()
 
+        # 如果参考音频改变了，才需要重新生成 cond_mel, 提升速度
         if self.cache_cond_mel is None or self.cache_audio_prompt != audio_prompt:
             audio, sr = torchaudio.load(audio_prompt)
             audio = torch.mean(audio, dim=0, keepdim=True)
@@ -1144,8 +1148,8 @@ class IndexTTS:
         bucket_count = len(all_sentences)
         if verbose:
             print(">> sentences bucket_count:", bucket_count,
-                    "bucket sizes:", [(len(s), [t["idx"] for t in s]) for s in all_sentences],
-                    "bucket_max_size:", bucket_max_size)
+                  "bucket sizes:", [(len(s), [t["idx"] for t in s]) for s in all_sentences],
+                  "bucket_max_size:", bucket_max_size)
         for sentences in all_sentences:
             temp_tokens: List[torch.Tensor] = []
             all_text_tokens.append(temp_tokens)
@@ -1358,7 +1362,7 @@ class IndexTTS:
                 with torch.amp.autocast(text_tokens.device.type, enabled=self.dtype is not None, dtype=self.dtype):
                     codes = self.gpt.inference_speech(auto_conditioning, text_tokens,
                                                         cond_mel_lengths=torch.tensor([auto_conditioning.shape[-1]],
-                                                                                        device=text_tokens.device),
+                                                                                      device=text_tokens.device),
                                                         # text_lengths=text_len,
                                                         do_sample=do_sample,
                                                         top_p=top_p,
@@ -1688,6 +1692,7 @@ class IndexSpeakersPreview:
 class MultiLinePromptIndex:
     @classmethod
     def INPUT_TYPES(cls):
+               
         return {
             "required": {
                 "multi_line_prompt": ("STRING", {
